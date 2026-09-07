@@ -5,6 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from groq import Groq
+from langchain_groq import ChatGroq
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
@@ -26,11 +27,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-llm = ChatGoogleGenerativeAI(
+# Primary chat model: Gemini (best quality)
+gemini_llm = ChatGoogleGenerativeAI(
     model="gemini-3.6-flash",
     google_api_key=os.environ["GOOGLE_API_KEY"],
     max_output_tokens=1024,
 )
+# Backup chat model: Groq (far more generous free limits)
+groq_llm = ChatGroq(
+    model="openai/gpt-oss-20b",
+    api_key=os.environ["GROQ_API_KEY"],
+    max_tokens=800,
+)
+# If Gemini errors (e.g., its 20/day free limit), automatically use Groq instead
+llm = gemini_llm.with_fallbacks([groq_llm])
 
 # A direct Groq client for audio transcription (Whisper stays on Groq)
 groq_client = Groq(api_key=os.environ["GROQ_API_KEY"])
@@ -209,14 +219,17 @@ def chat(request: ChatRequest, authorization: str = Header(None)):
     db.commit()
 
     if request.image:
-        # Multimodal mode: let Gemini look at the image
+        # Multimodal mode: only Gemini can see images (Groq can't), so no fallback here
         messages = [SystemMessage(content="You are Study Buddy, a friendly study tutor. Explain things simply and clearly.")]
         messages += history
         messages.append(HumanMessage(content=[
             {"type": "text", "text": request.message or "Please look at this image and help me with it."},
             {"type": "image_url", "image_url": request.image},
         ]))
-        reply = message_to_text(llm.invoke(messages))
+        try:
+            reply = message_to_text(gemini_llm.invoke(messages))
+        except Exception:
+            reply = "Sorry, image understanding is temporarily unavailable (the vision model hit its daily free limit). Please try again later, or ask me in text."
     elif user.id in user_vectorstores:
         # RAG mode: retrieve relevant chunks, then answer from them (with memory)
         retriever = user_vectorstores[user.id].as_retriever(search_kwargs={"k": 3})
