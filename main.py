@@ -6,7 +6,8 @@ from pydantic import BaseModel
 from dotenv import load_dotenv
 from groq import Groq
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.messages import HumanMessage, AIMessage
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
@@ -36,13 +37,14 @@ groq_client = Groq(api_key=os.environ["GROQ_API_KEY"])
 
 prompt = ChatPromptTemplate.from_messages([
     ("system", "You are Study Buddy, a friendly study tutor. Explain things simply and clearly."),
+    MessagesPlaceholder(variable_name="history"),
     ("human", "{question}"),
 ])
 chain = prompt | llm
 
 # A separate prompt for when we're answering from an uploaded PDF (RAG mode)
-rag_prompt = ChatPromptTemplate.from_template("""
-You are Study Buddy, a friendly study tutor. The user has uploaded a document, and
+rag_prompt = ChatPromptTemplate.from_messages([
+    ("system", """You are Study Buddy, a friendly study tutor. The user has uploaded a document, and
 relevant excerpts from it are provided below as context.
 
 How to respond:
@@ -53,10 +55,10 @@ How to respond:
 - For general questions that aren't about the document, just answer helpfully.
 
 Context:
-{context}
-
-Question: {question}
-""")
+{context}"""),
+    MessagesPlaceholder(variable_name="history"),
+    ("human", "{question}"),
+])
 rag_chain = rag_prompt | llm
 
 
@@ -190,9 +192,14 @@ def chat(request: ChatRequest, authorization: str = Header(None)):
         db.close()
         raise HTTPException(status_code=404, detail="Conversation not found")
 
+    # Load this conversation's past messages so the bot remembers the discussion
+    prior = db.query(Message).filter(Message.conversation_id == convo.id).order_by(Message.id).all()
+    history = []
+    for m in prior:
+        history.append(HumanMessage(content=m.content) if m.role == "user" else AIMessage(content=m.content))
+
     # If this is the first message, name the conversation after it
-    first_message = db.query(Message).filter(Message.conversation_id == convo.id).first()
-    if not first_message:
+    if len(prior) == 0:
         convo.title = request.message[:40]
         db.commit()
 
@@ -200,14 +207,14 @@ def chat(request: ChatRequest, authorization: str = Header(None)):
     db.commit()
 
     if user.id in user_vectorstores:
-        # RAG mode: retrieve relevant chunks, then answer from them
+        # RAG mode: retrieve relevant chunks, then answer from them (with memory)
         retriever = user_vectorstores[user.id].as_retriever(search_kwargs={"k": 3})
         docs = retriever.invoke(request.message)
         context = "\n\n".join(d.page_content for d in docs)
-        reply = message_to_text(rag_chain.invoke({"context": context, "question": request.message}))
+        reply = message_to_text(rag_chain.invoke({"context": context, "history": history, "question": request.message}))
     else:
-        # Normal mode: no PDF uploaded yet
-        reply = message_to_text(chain.invoke({"question": request.message}))
+        # Normal mode: no PDF uploaded yet (with memory)
+        reply = message_to_text(chain.invoke({"history": history, "question": request.message}))
 
     db.add(Message(user_id=user.id, conversation_id=convo.id, role="bot", content=reply))
     db.commit()
