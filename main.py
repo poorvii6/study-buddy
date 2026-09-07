@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 from groq import Groq
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
@@ -91,8 +91,9 @@ def get_embeddings():
 
 # ---------- Request shapes ----------
 class ChatRequest(BaseModel):
-    message: str
+    message: str = ""
     conversation_id: int
+    image: str | None = None   # optional base64 data URL of an image
 
 
 class AuthRequest(BaseModel):
@@ -203,10 +204,20 @@ def chat(request: ChatRequest, authorization: str = Header(None)):
         convo.title = request.message[:40]
         db.commit()
 
-    db.add(Message(user_id=user.id, conversation_id=convo.id, role="user", content=request.message))
+    content_to_save = request.message or "[Sent an image]"
+    db.add(Message(user_id=user.id, conversation_id=convo.id, role="user", content=content_to_save))
     db.commit()
 
-    if user.id in user_vectorstores:
+    if request.image:
+        # Multimodal mode: let Gemini look at the image
+        messages = [SystemMessage(content="You are Study Buddy, a friendly study tutor. Explain things simply and clearly.")]
+        messages += history
+        messages.append(HumanMessage(content=[
+            {"type": "text", "text": request.message or "Please look at this image and help me with it."},
+            {"type": "image_url", "image_url": request.image},
+        ]))
+        reply = message_to_text(llm.invoke(messages))
+    elif user.id in user_vectorstores:
         # RAG mode: retrieve relevant chunks, then answer from them (with memory)
         retriever = user_vectorstores[user.id].as_retriever(search_kwargs={"k": 3})
         docs = retriever.invoke(request.message)
