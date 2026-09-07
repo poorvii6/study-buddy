@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from groq import Groq
-from langchain_groq import ChatGroq
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -25,13 +25,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-llm = ChatGroq(
-    model="openai/gpt-oss-20b",
-    api_key=os.environ["GROQ_API_KEY"],
-    max_tokens=800,
+llm = ChatGoogleGenerativeAI(
+    model="gemini-3.6-flash",
+    google_api_key=os.environ["GOOGLE_API_KEY"],
+    max_output_tokens=1024,
 )
 
-# A direct Groq client for audio transcription (Whisper)
+# A direct Groq client for audio transcription (Whisper stays on Groq)
 groq_client = Groq(api_key=os.environ["GROQ_API_KEY"])
 
 prompt = ChatPromptTemplate.from_messages([
