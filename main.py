@@ -59,6 +59,21 @@ Question: {question}
 """)
 rag_chain = rag_prompt | llm
 
+
+# Gemini returns message content as a list of blocks; normalize it to plain text
+def message_to_text(message):
+    content = message.content
+    if isinstance(content, str):
+        return content
+    parts = []
+    for block in content:
+        if isinstance(block, dict):
+            parts.append(block.get("text", ""))
+        else:
+            parts.append(str(block))
+    return "".join(parts)
+
+
 # Holds each user's uploaded-PDF search index, in memory: {user_id: vectorstore}
 user_vectorstores = {}
 
@@ -189,10 +204,10 @@ def chat(request: ChatRequest, authorization: str = Header(None)):
         retriever = user_vectorstores[user.id].as_retriever(search_kwargs={"k": 3})
         docs = retriever.invoke(request.message)
         context = "\n\n".join(d.page_content for d in docs)
-        reply = rag_chain.invoke({"context": context, "question": request.message}).content
+        reply = message_to_text(rag_chain.invoke({"context": context, "question": request.message}))
     else:
         # Normal mode: no PDF uploaded yet
-        reply = chain.invoke({"question": request.message}).content
+        reply = message_to_text(chain.invoke({"question": request.message}))
 
     db.add(Message(user_id=user.id, conversation_id=convo.id, role="bot", content=reply))
     db.commit()
