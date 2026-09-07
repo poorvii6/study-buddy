@@ -1,0 +1,7 @@
+venv/
+__pycache__/
+*.pyc
+.env
+study_buddy.db
+temp_*.pdf
+.git/

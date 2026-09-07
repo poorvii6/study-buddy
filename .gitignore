@@ -1,0 +1,7 @@
+# Never commit these
+venv/
+.env
+__pycache__/
+*.pyc
+study_buddy.db
+temp_*.pdf

@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Study Buddy</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, -apple-system, sans-serif; margin: 0; background: #f0f2f5;
+           display: flex; flex-direction: column; height: 100vh; }
+
+    /* Login / signup screen */
+    #authView { flex: 1; display: flex; align-items: center; justify-content: center; }
+    .card { background: white; padding: 32px; border-radius: 16px; width: 320px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+    .card h2 { margin: 0 0 20px; text-align: center; color: #4f46e5; }
+    .card input { width: 100%; padding: 12px; margin-bottom: 12px; border: 1px solid #ccc;
+                  border-radius: 8px; font-size: 15px; }
+    .card button { width: 100%; padding: 12px; border: none; border-radius: 8px;
+                   font-size: 15px; cursor: pointer; margin-bottom: 8px; }
+    .primary { background: #4f46e5; color: white; }
+    .secondary { background: #eee; color: #333; }
+    #authMsg { text-align: center; font-size: 14px; margin-top: 8px; min-height: 20px; }
+
+    /* Chat screen = sidebar + main area */
+    #chatView { flex: 1; display: none; flex-direction: row; overflow: hidden; }
+
+    #sidebar { width: 260px; background: #1f2937; color: white; display: flex;
+               flex-direction: column; padding: 12px; gap: 8px; }
+    #newChatBtn { padding: 12px; background: #4f46e5; color: white; border: none;
+                  border-radius: 8px; font-size: 15px; cursor: pointer; }
+    #convoList { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+    .convo-item { padding: 10px; border-radius: 8px; cursor: pointer; color: #d1d5db;
+                  font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .convo-item:hover { background: #374151; }
+    .convo-item.active { background: #4f46e5; color: white; }
+    #logoutBtn { padding: 10px; background: #374151; color: white; border: none;
+                 border-radius: 8px; cursor: pointer; font-size: 14px; }
+
+    #chatMain { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+    #chatHeader { background: #4f46e5; color: white; padding: 16px; font-size: 20px; font-weight: 600; }
+    #messages { flex: 1; overflow-y: auto; padding: 16px; display: flex;
+                flex-direction: column; gap: 12px; }
+    .msg { max-width: 75%; padding: 10px 14px; border-radius: 16px; line-height: 1.5;
+           white-space: pre-wrap; word-wrap: break-word; }
+    .user { align-self: flex-end; background: #4f46e5; color: white; border-bottom-right-radius: 4px; }
+    .bot { align-self: flex-start; background: white; color: #111;
+           border: 1px solid #ddd; border-bottom-left-radius: 4px; }
+    .bot code { background: #f0f0f5; padding: 1px 5px; border-radius: 4px;
+                font-family: ui-monospace, monospace; font-size: 13px; }
+    .bot pre { background: #f0f0f5; padding: 10px; border-radius: 8px; overflow-x: auto; }
+    .bot pre code { background: none; padding: 0; }
+    .bot ul { padding-left: 18px; }
+    #inputRow { display: flex; padding: 12px; gap: 8px; background: white; border-top: 1px solid #ddd; }
+    #userInput { flex: 1; padding: 12px; border: 1px solid #ccc; border-radius: 20px;
+                 font-size: 15px; outline: none; }
+    #sendBtn { padding: 12px 20px; background: #4f46e5; color: white; border: none;
+               border-radius: 20px; font-size: 15px; cursor: pointer; }
+    #sendBtn:disabled { opacity: 0.5; cursor: default; }
+    #uploadBtn, #micBtn { padding: 12px 14px; background: #eee; border: 1px solid #ccc;
+                 border-radius: 20px; font-size: 16px; cursor: pointer; }
+    #micBtn.listening { background: #ffd5d5; border-color: #e24b4a; }
+  </style>
+</head>
+<body>
+
+  <!-- LOGIN / SIGNUP SCREEN -->
+  <div id="authView">
+    <div class="card">
+      <h2>📚 Study Buddy</h2>
+      <input id="authUser" type="text" placeholder="Username" autocomplete="off">
+      <input id="authPass" type="password" placeholder="Password">
+      <button class="primary" id="loginBtn">Log in</button>
+      <button class="secondary" id="signupBtn">Create account</button>
+      <div id="authMsg"></div>
+    </div>
+  </div>
+
+  <!-- CHAT SCREEN -->
+  <div id="chatView">
+    <aside id="sidebar">
+      <button id="newChatBtn">+ New chat</button>
+      <div id="convoList"></div>
+      <button id="logoutBtn">Log out</button>
+    </aside>
+    <main id="chatMain">
+      <div id="chatHeader">📚 Study Buddy</div>
+      <div id="messages"></div>
+      <div id="inputRow">
+        <input id="fileInput" type="file" accept="application/pdf" style="display:none">
+        <button id="uploadBtn" title="Upload a PDF">📎</button>
+        <button id="micBtn" title="Speak your question">🎤</button>
+        <input id="userInput" type="text" placeholder="Type your question..." autocomplete="off">
+        <button id="sendBtn">Send</button>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const authView = document.getElementById("authView");
+    const chatView = document.getElementById("chatView");
+    const authMsg = document.getElementById("authMsg");
+    const messagesEl = document.getElementById("messages");
+    const convoListEl = document.getElementById("convoList");
+    const inputEl = document.getElementById("userInput");
+    const sendBtn = document.getElementById("sendBtn");
+
+    let currentConversationId = null;
+
+    // The login token is remembered in the browser's localStorage
+    function getToken() { return localStorage.getItem("token"); }
+    function setToken(t) { localStorage.setItem("token", t); }
+    function clearToken() { localStorage.removeItem("token"); }
+    function authHeader() { return { "Authorization": "Bearer " + getToken() }; }
+
+    // ---------- Views ----------
+    function showChat() {
+      authView.style.display = "none";
+      chatView.style.display = "flex";
+      initConversations();
+    }
+    function showAuth() {
+      chatView.style.display = "none";
+      authView.style.display = "flex";
+    }
+
+    // ---------- Auth ----------
+    async function signup() {
+      const username = document.getElementById("authUser").value.trim();
+      const password = document.getElementById("authPass").value;
+      if (!username || !password) { authMsg.textContent = "Enter a username and password."; return; }
+      const res = await fetch("/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password })
+      });
+      const data = await res.json();
+      authMsg.style.color = res.ok ? "green" : "red";
+      authMsg.textContent = res.ok ? data.message : data.detail;
+    }
+
+    async function login() {
+      const username = document.getElementById("authUser").value.trim();
+      const password = document.getElementById("authPass").value;
+      if (!username || !password) { authMsg.textContent = "Enter a username and password."; return; }
+      const res = await fetch("/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password })
+      });
+      const data = await res.json();
+      if (res.ok) { setToken(data.token); showChat(); }
+      else { authMsg.style.color = "red"; authMsg.textContent = data.detail; }
+    }
+
+    function logout() { clearToken(); currentConversationId = null; showAuth(); }
+
+    // ---------- Conversations ----------
+    async function fetchConversations() {
+      const res = await fetch("/conversations", { headers: authHeader() });
+      if (!res.ok) { if (res.status === 401) logout(); return []; }
+      return await res.json();
+    }
+
+    function renderConvoList(convos) {
+      convoListEl.innerHTML = "";
+      convos.forEach(c => {
+        const div = document.createElement("div");
+        div.className = "convo-item" + (c.id === currentConversationId ? " active" : "");
+        div.textContent = c.title || "New chat";
+        div.addEventListener("click", () => selectConversation(c.id));
+        convoListEl.appendChild(div);
+      });
+    }
+
+    async function initConversations() {
+      const convos = await fetchConversations();
+      if (convos.length === 0) {
+        await newChat();
+      } else {
+        currentConversationId = convos[0].id;   // most recent
+        renderConvoList(convos);
+        loadMessages(currentConversationId);
+      }
+    }
+
+    async function selectConversation(id) {
+      currentConversationId = id;
+      const convos = await fetchConversations();
+      renderConvoList(convos);
+      loadMessages(id);
+    }
+
+    async function loadMessages(id) {
+      messagesEl.innerHTML = "";
+      const res = await fetch("/conversations/" + id + "/messages", { headers: authHeader() });
+      if (!res.ok) return;
+      const messages = await res.json();
+      if (messages.length === 0) {
+        addMessage("Hi! I'm Study Buddy. Ask me anything you're studying!", "bot");
+      } else {
+        messages.forEach(m => addMessage(m.content, m.role === "user" ? "user" : "bot"));
+      }
+    }
+
+    async function newChat() {
+      const res = await fetch("/conversations", { method: "POST", headers: authHeader() });
+      if (!res.ok) { if (res.status === 401) logout(); return; }
+      const convo = await res.json();
+      currentConversationId = convo.id;
+      const convos = await fetchConversations();
+      renderConvoList(convos);
+      messagesEl.innerHTML = "";
+      addMessage("Hi! I'm Study Buddy. Ask me anything you're studying!", "bot");
+    }
+
+    // ---------- Chat ----------
+    // A small, safe Markdown renderer (escapes HTML first, then formats).
+    function renderMarkdown(md) {
+      const esc = s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      const inline = s => esc(s)
+        .replace(/`([^`]+)`/g, "<code>$1</code>")
+        .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+        .replace(/\*([^*]+)\*/g, "<em>$1</em>");
+      const lines = md.split("\n");
+      let html = "", inList = false, inCode = false, codeBuf = "";
+      for (const line of lines) {
+        if (line.trim().startsWith("```")) {
+          if (inCode) { html += "<pre><code>" + esc(codeBuf) + "</code></pre>"; codeBuf = ""; inCode = false; }
+          else { inCode = true; }
+          continue;
+        }
+        if (inCode) { codeBuf += line + "\n"; continue; }
+        const item = line.match(/^\s*(?:[-*]|\d+\.)\s+(.*)/);
+        if (item) {
+          if (!inList) { html += "<ul style='margin:4px 0 4px 18px'>"; inList = true; }
+          html += "<li>" + inline(item[1]) + "</li>";
+          continue;
+        }
+        if (inList) { html += "</ul>"; inList = false; }
+        const h = line.match(/^#{1,4}\s+(.*)/);
+        if (h) { html += "<strong>" + inline(h[1]) + "</strong><br>"; continue; }
+        if (line.trim() === "") { html += "<br>"; continue; }
+        html += inline(line) + "<br>";
+      }
+      if (inList) html += "</ul>";
+      if (inCode) html += "<pre><code>" + esc(codeBuf) + "</code></pre>";
+      return html;
+    }
+
+    function addMessage(text, sender) {
+      const div = document.createElement("div");
+      div.className = "msg " + sender;
+      if (sender === "bot") { div.innerHTML = renderMarkdown(text); }
+      else { div.textContent = text; }
+      messagesEl.appendChild(div);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+      return div;
+    }
+
+    async function sendMessage() {
+      if (sendBtn.disabled) return;                     // guard against double-send
+      const message = inputEl.value.trim();
+      if (!message || !currentConversationId) return;
+      addMessage(message, "user");
+      inputEl.value = "";
+      sendBtn.disabled = true;
+      const thinking = addMessage("Thinking...", "bot");
+      try {
+        const res = await fetch("/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...authHeader() },
+          body: JSON.stringify({ message, conversation_id: currentConversationId })
+        });
+        if (res.status === 401) { logout(); return; }
+        const data = await res.json();
+        thinking.innerHTML = renderMarkdown(data.reply);
+        // Refresh the sidebar so a new chat's title updates
+        renderConvoList(await fetchConversations());
+      } catch (err) {
+        thinking.textContent = "Error: could not reach the server.";
+      }
+      sendBtn.disabled = false;
+      inputEl.focus();
+    }
+
+    // ---------- PDF upload ----------
+    const fileInput = document.getElementById("fileInput");
+    document.getElementById("uploadBtn").addEventListener("click", () => fileInput.click());
+    fileInput.addEventListener("change", uploadPDF);
+
+    async function uploadPDF(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      const info = addMessage("Reading '" + file.name + "'... (first upload can take a minute)", "bot");
+      const formData = new FormData();
+      formData.append("file", file);
+      try {
+        const res = await fetch("/upload", { method: "POST", headers: authHeader(), body: formData });
+        const data = await res.json();
+        info.textContent = res.ok ? data.message : (data.detail || "Upload failed.");
+      } catch (err) {
+        info.textContent = "Error uploading file.";
+      }
+      e.target.value = "";
+    }
+
+    // ---------- Voice input (records audio, transcribes with Groq Whisper) ----------
+    const micBtn = document.getElementById("micBtn");
+    let mediaRecorder = null;
+    let audioChunks = [];
+    let recording = false;
+
+    micBtn.addEventListener("click", async () => {
+      if (recording) { mediaRecorder.stop(); return; }   // second click = stop
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream);
+        audioChunks = [];
+        mediaRecorder.ondataavailable = (e) => audioChunks.push(e.data);
+        mediaRecorder.onstart = () => {
+          recording = true; micBtn.classList.add("listening"); micBtn.textContent = "⏹️";
+        };
+        mediaRecorder.onstop = async () => {
+          recording = false; micBtn.classList.remove("listening"); micBtn.textContent = "🎤";
+          stream.getTracks().forEach(t => t.stop());   // release the mic
+          const blob = new Blob(audioChunks, { type: "audio/webm" });
+          const oldPlaceholder = inputEl.placeholder;
+          inputEl.placeholder = "Transcribing...";
+          const formData = new FormData();
+          formData.append("file", blob, "audio.webm");
+          try {
+            const res = await fetch("/transcribe", { method: "POST", headers: authHeader(), body: formData });
+            const data = await res.json();
+            if (res.ok) inputEl.value = data.text;
+          } catch (err) {}
+          inputEl.placeholder = oldPlaceholder;
+          inputEl.focus();
+        };
+        mediaRecorder.start();
+      } catch (err) {
+        alert("Could not access the microphone.");
+      }
+    });
+
+    // ---------- Wire up buttons ----------
+    document.getElementById("loginBtn").addEventListener("click", login);
+    document.getElementById("signupBtn").addEventListener("click", signup);
+    document.getElementById("logoutBtn").addEventListener("click", logout);
+    document.getElementById("newChatBtn").addEventListener("click", newChat);
+    sendBtn.addEventListener("click", sendMessage);
+    inputEl.addEventListener("keydown", (e) => { if (e.key === "Enter") sendMessage(); });
+
+    // ---------- On load ----------
+    if (getToken()) { showChat(); } else { showAuth(); }
+  </script>
+</body>
+</html>
