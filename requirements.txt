@@ -4,11 +4,10 @@ python-dotenv
 langchain
 langchain-groq
 langchain-community
-langchain-huggingface
 langchain-text-splitters
 faiss-cpu
 pypdf
-sentence-transformers
+fastembed
 python-multipart
 sqlalchemy
 groq
