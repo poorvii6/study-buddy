@@ -57,7 +57,7 @@
     #sendBtn { padding: 12px 20px; background: #4f46e5; color: white; border: none;
                border-radius: 20px; font-size: 15px; cursor: pointer; }
     #sendBtn:disabled { opacity: 0.5; cursor: default; }
-    #uploadBtn, #micBtn, #imageBtn { padding: 12px 14px; background: #eee; border: 1px solid #ccc;
+    #uploadBtn, #micBtn { padding: 12px 14px; background: #eee; border: 1px solid #ccc;
                  border-radius: 20px; font-size: 16px; cursor: pointer; }
     #micBtn.listening { background: #ffd5d5; border-color: #e24b4a; }
     #imagePreview { display: none; align-items: center; gap: 8px; padding: 8px 12px;
@@ -97,12 +97,10 @@
         <button id="removeImg" title="Remove image">✕</button>
       </div>
       <div id="inputRow">
-        <input id="fileInput" type="file" accept="application/pdf" style="display:none">
-        <input id="imageInput" type="file" accept="image/*" style="display:none">
-        <button id="uploadBtn" title="Upload a PDF">📎</button>
-        <button id="imageBtn" title="Add an image (or paste one)">🖼️</button>
+        <input id="fileInput" type="file" accept="application/pdf,image/*" style="display:none">
+        <button id="uploadBtn" title="Attach a PDF or image">📎</button>
         <button id="micBtn" title="Speak your question">🎤</button>
-        <input id="userInput" type="text" placeholder="Type your question..." autocomplete="off">
+        <input id="userInput" type="text" placeholder="Type or paste a screenshot..." autocomplete="off">
         <button id="sendBtn">Send</button>
       </div>
     </main>
@@ -336,14 +334,19 @@
       inputEl.focus();
     }
 
-    // ---------- PDF upload ----------
+    // ---------- Attach button: PDF -> RAG upload, image -> multimodal ----------
     const fileInput = document.getElementById("fileInput");
     document.getElementById("uploadBtn").addEventListener("click", () => fileInput.click());
-    fileInput.addEventListener("change", uploadPDF);
+    fileInput.addEventListener("change", (e) => { handleFile(e.target.files[0]); e.target.value = ""; });
 
-    async function uploadPDF(e) {
-      const file = e.target.files[0];
+    function handleFile(file) {
       if (!file) return;
+      if (file.type === "application/pdf") { uploadPDF(file); }
+      else if (file.type.indexOf("image") === 0) { setPendingImage(file); }
+      else { addMessage("Sorry, I can only take PDFs or images.", "bot"); }
+    }
+
+    async function uploadPDF(file) {
       const info = addMessage("Reading '" + file.name + "'... (first upload can take a minute)", "bot");
       const formData = new FormData();
       formData.append("file", file);
@@ -354,7 +357,6 @@
       } catch (err) {
         info.textContent = "Error uploading file.";
       }
-      e.target.value = "";
     }
 
     // ---------- Voice input (records audio, transcribes with Groq Whisper) ----------
@@ -403,10 +405,7 @@
     sendBtn.addEventListener("click", sendMessage);
     inputEl.addEventListener("keydown", (e) => { if (e.key === "Enter") sendMessage(); });
 
-    // ---- Image: pick or paste ----
-    const imageInput = document.getElementById("imageInput");
-    document.getElementById("imageBtn").addEventListener("click", () => imageInput.click());
-    imageInput.addEventListener("change", (e) => { setPendingImage(e.target.files[0]); e.target.value = ""; });
+    // ---- Image: paste a screenshot, or remove the pending one ----
     document.getElementById("removeImg").addEventListener("click", clearPendingImage);
     document.addEventListener("paste", (e) => {
       const items = (e.clipboardData && e.clipboardData.items) || [];
