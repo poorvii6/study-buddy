@@ -4,10 +4,11 @@ python-dotenv
 langchain
 langchain-groq
 langchain-community
+langchain-huggingface
 langchain-text-splitters
 faiss-cpu
 pypdf
+sentence-transformers
 python-multipart
 sqlalchemy
 groq
-huggingface-hub

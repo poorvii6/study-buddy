@@ -62,16 +62,13 @@ rag_chain = rag_prompt | llm
 # Holds each user's uploaded-PDF search index, in memory: {user_id: vectorstore}
 user_vectorstores = {}
 
-# Embeddings via Hugging Face's API (no local PyTorch model — keeps the app small)
+# Embeddings run locally with a small model (no API token needed)
 _embeddings = None
 def get_embeddings():
     global _embeddings
     if _embeddings is None:
-        from langchain_community.embeddings import HuggingFaceInferenceAPIEmbeddings
-        _embeddings = HuggingFaceInferenceAPIEmbeddings(
-            api_key=os.environ["HF_TOKEN"],
-            model_name="sentence-transformers/all-MiniLM-L6-v2",
-        )
+        from langchain_huggingface import HuggingFaceEmbeddings
+        _embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
     return _embeddings
 
 
