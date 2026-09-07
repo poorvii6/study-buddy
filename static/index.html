@@ -67,6 +67,13 @@
                  width: 24px; height: 24px; cursor: pointer; }
     .msg img { max-width: 220px; border-radius: 8px; display: block; margin-bottom: 6px; }
   </style>
+  <script>
+    window.MathJax = {
+      tex: { inlineMath: [['$', '$']], displayMath: [['$$', '$$']] },
+      options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre'] }
+    };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
 </head>
 <body>
 
@@ -258,12 +265,20 @@
       return html;
     }
 
+    // Render LaTeX math ($$...$$ and $...$) inside an element using MathJax
+    function typesetMath(el) {
+      if (window.MathJax && window.MathJax.typesetPromise) {
+        window.MathJax.typesetPromise([el]).catch(() => {});
+      }
+    }
+
     function addMessage(text, sender) {
       const div = document.createElement("div");
       div.className = "msg " + sender;
       if (sender === "bot") { div.innerHTML = renderMarkdown(text); }
       else { div.textContent = text; }
       messagesEl.appendChild(div);
+      if (sender === "bot") typesetMath(div);
       messagesEl.scrollTop = messagesEl.scrollHeight;
       return div;
     }
@@ -325,6 +340,7 @@
         if (res.status === 401) { logout(); return; }
         const data = await res.json();
         thinking.innerHTML = renderMarkdown(data.reply);
+        typesetMath(thinking);
         // Refresh the sidebar so a new chat's title updates
         renderConvoList(await fetchConversations());
       } catch (err) {
